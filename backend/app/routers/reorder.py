@@ -49,7 +49,7 @@ def get_reorder_recommendations(db: Session = Depends(get_db)):
 
         rec = engine.generate_recommendation(medicine_dict, forecast_dict)
         if rec['urgency'] in ('URGENT', 'WARNING'):
-            results.append(ReorderItem(**rec, lead_time_days=med.lead_time_days))
+            results.append(ReorderItem(**rec))
 
     return sorted(results, key=lambda x: (
         0 if x.urgency == 'URGENT' else 1 if x.urgency == 'WARNING' else 2

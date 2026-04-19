@@ -5,7 +5,7 @@ from typing import List
 from app.database import get_db
 from app.models.medicine import Medicine
 from app.schemas.medicine import MedicineCreate, MedicineResponse, RiskScoreResponse
-from app.services.risk_scoring import RiskScorer
+from app.services.riskscoring import RiskScorer
 import math
 
 router = APIRouter(prefix="/api/medicines", tags=["Medicines"])
