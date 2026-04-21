@@ -102,9 +102,9 @@ env.bak/
 venv.bak/
 
 # Environment Variables
-\backend\.env
-\backend\.env.local
-\backend\.env.example
+backend/.env
+backend/.env.local
+backend/.env.example
 
 # Spyder project settings
 .spyderproject
