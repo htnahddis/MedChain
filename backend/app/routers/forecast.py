@@ -107,7 +107,7 @@ async def get_stockout_risk_all(
 @router.get("/risk-scores/all")
 async def get_all_risk_scores(db: Session = Depends(get_db)):
     """Returns composite risk scores for all medicines."""
-    from app.services.risk_scoring import RiskScorer
+    from app.services.riskscoring import RiskScorer
     scorer = RiskScorer()
     medicines = db.query(Medicine).all()
     
