@@ -1,13 +1,13 @@
-# backend/app/schemas/forecast.py
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 
 class ForecastPoint(BaseModel):
-    forecast_date: date
+    forecast_date: datetime
     predicted_units: int
     upper_ci: int
     lower_ci: int
+    model_pred: float  # Added to capture NeuralProphet's raw output
 
 class ForecastResponse(BaseModel):
     medicine_id: int
@@ -16,7 +16,7 @@ class ForecastResponse(BaseModel):
     horizon_days: int
     model_mape: Optional[float] = None
     avg_daily_demand: Optional[float] = None
-    forecasts: List[dict]
+    forecasts: List[ForecastPoint]  # Changed from List[dict] for strict validation
 
 class StockoutRiskItem(BaseModel):
     medicine_id: int

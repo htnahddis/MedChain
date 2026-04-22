@@ -52,3 +52,5 @@ httpx>=0.26.0
 # Utilities
 python-dateutil
 scipy
+
+lightbgm
