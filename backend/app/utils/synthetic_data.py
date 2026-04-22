@@ -1,7 +1,13 @@
 import pandas as pd
 import numpy as np
+import random
 from datetime import date, timedelta
 from typing import List, Dict
+from sqlalchemy.orm import Session
+
+from app.models.medicine import Medicine
+from app.models.consumption import ConsumptionRecord
+from app.models.supplier import Supplier, MedicineSupplier
 
 def generate_hospital_consumption(
     medicine_name: str,
@@ -36,7 +42,6 @@ def generate_hospital_consumption(
     }
     
     records = []
-    np.random.seed(42)
     
     for i in range(days_history):
         current_date = start_date + timedelta(days=i)
@@ -70,7 +75,7 @@ def generate_hospital_consumption(
     return pd.DataFrame(records)
 
 
-# Seed data: 20 essential medicines with base demand rates
+# Seed data: 10 essential medicines with base demand rates
 ESSENTIAL_MEDICINES_SEED = [
     {'name': 'Amoxicillin 500mg', 'category': 'Antibiotic',    'base_daily': 85,  'beds_per_unit': 5.9},
     {'name': 'ORS Sachets',       'category': 'Rehydration',   'base_daily': 120, 'beds_per_unit': 4.2},
@@ -83,3 +88,91 @@ ESSENTIAL_MEDICINES_SEED = [
     {'name': 'Metronidazole',     'category': 'Antibiotic',    'base_daily': 40,  'beds_per_unit': 12.5},
     {'name': 'Amlodipine 5mg',    'category': 'Cardiovascular','base_daily': 50,  'beds_per_unit': 10.0},
 ]
+
+
+def seed_database(db: Session, bed_count: int = 500, days_history: int = 365):
+    """
+    Clears existing DB models, pushes Medicines, generates 1-year of synthetic 
+    consumption data using our realistic model, and mocks Suppliers.
+    """
+    # 1. Clear existing generic data to prevent duplication during seed
+    db.query(ConsumptionRecord).delete()
+    db.query(MedicineSupplier).delete()
+    db.query(Supplier).delete()
+    db.query(Medicine).delete()
+    db.commit()
+
+    # 2. Add realistic suppliers
+    suppliers = [
+        Supplier(name="Sun Pharma Distributors", reliability_score=92.0, lead_time_days=7),
+        Supplier(name="Cipla Logistics", reliability_score=88.5, lead_time_days=10),
+        Supplier(name="Reddy Import Solutions", reliability_score=75.0, lead_time_days=21),
+        Supplier(name="Ad-Hoc MediSupply", reliability_score=60.0, lead_time_days=5),
+    ]
+    db.add_all(suppliers)
+    db.commit()
+
+    for s in suppliers:
+        db.refresh(s)
+
+    # 3. Add medicines and historical consumption
+    print(f"Generating {(days_history * len(ESSENTIAL_MEDICINES_SEED))} realistic hospital consumption records...")
+    
+    np.random.seed(42) # Deterministic generation 
+    
+    for med_data in ESSENTIAL_MEDICINES_SEED:
+        china_api = random.uniform(10.0, 85.0) # Simulate China API dependency for risk scoring
+        
+        # Dynamically scale demand based on the hospital's bed count
+        dynamic_base_daily = bed_count / med_data['beds_per_unit']
+
+        medicine = Medicine(
+            name=med_data['name'],
+            category=med_data['category'],
+            is_who_essential=True,
+            current_stock_units=int(dynamic_base_daily * random.uniform(15, 45)), # 15-45 days of stock
+            china_api_pct=china_api,
+            reorder_point=int(dynamic_base_daily * 20),
+            unit_cost_inr=random.uniform(5.0, 55.0)
+        )
+        db.add(medicine)
+        db.commit()
+        db.refresh(medicine)
+
+        # Assign 1-3 suppliers to this medicine
+        num_suppliers = random.randint(1, 3)
+        chosen_suppliers = random.sample(suppliers, num_suppliers)
+        for idx, sup in enumerate(chosen_suppliers):
+            ms = MedicineSupplier(
+                medicine_id=medicine.id,
+                supplier_id=sup.id,
+                is_primary=(idx == 0),
+                china_api_pct= (china_api + random.uniform(-10, 10)) if sup.name == "Reddy Import Solutions" else 0.0
+            )
+            db.add(ms)
+        db.commit()
+
+        # Generate pandas dataframe using our robust methodology
+        df = generate_hospital_consumption(
+            medicine_name=med_data['name'],
+            category=med_data['category'],
+            base_daily_demand=dynamic_base_daily,
+            bed_count=bed_count,
+            days_history=days_history
+        )
+
+        # Convert DataFrame to SQLAlchemy ConsumptionRecord models
+        records = []
+        for _, row in df.iterrows():
+            records.append(ConsumptionRecord(
+                medicine_id=medicine.id,
+                date=row['date'],
+                units_consumed=row['units_consumed'],
+                facility_type=f"{bed_count}-bed",
+                is_synthetic=True
+            ))
+        
+        db.add_all(records)
+        db.commit()
+    
+    print("Database seeding complete. Realistic structural data created.")

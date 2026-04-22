@@ -52,12 +52,17 @@ async def get_forecast(
         holdout_forecast['predicted_units'].values
     )
 
+    # Calculate average daily demand (using the last 30 days of historical data to reflect recent trends)
+    recent_records = consumption_dicts[-30:]
+    avg_daily = sum(r['units_consumed'] for r in recent_records) / len(recent_records) if recent_records else 0.0
+
     return ForecastResponse(
         medicine_id=medicine_id,
         medicine_name=medicine.name,
         category=medicine.category,
         horizon_days=horizon_days,
         model_mape=round(mape, 2),
+        avg_daily_demand=round(avg_daily, 2),  # <--- Added mapping here
         forecasts=forecast_df.to_dict('records')
     )
 

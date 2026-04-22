@@ -62,7 +62,7 @@ class ReorderEngine:
         Args:
             medicine: Dict with inventory and cost data
             forecast: Dict with Prophet forecast outputs
-        
+    
         Returns:
             Recommendation dict with quantity, cost, urgency, horizon
         """
@@ -105,4 +105,5 @@ class ReorderEngine:
             'estimated_cost_inr': round(estimated_cost, 2),
             'avg_daily_demand':  round(avg_daily, 1),
             'lead_time_days':    lead_time,
+            'suggested_supplier': medicine.get('suggested_supplier') # <-- Map the data here
         }

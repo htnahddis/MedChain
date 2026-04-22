@@ -8,6 +8,7 @@ from app.models.consumption import ConsumptionRecord
 from app.services.reorder_engine import ReorderEngine
 from app.schemas.forecast import ReorderItem
 from sqlalchemy import func
+from app.models.supplier import Supplier, MedicineSupplier # <-- Add MedicineSupplier here
 
 router = APIRouter(prefix="/api/reorder", tags=["Reorder"])
 
@@ -22,7 +23,6 @@ def get_reorder_recommendations(db: Session = Depends(get_db)):
     results = []
 
     for med in medicines:
-        # Get consumption stats from last 90 days
         records = db.query(ConsumptionRecord).filter(
             ConsumptionRecord.medicine_id == med.id
         ).order_by(ConsumptionRecord.date.desc()).limit(90).all()
@@ -35,12 +35,22 @@ def get_reorder_recommendations(db: Session = Depends(get_db)):
         avg_daily = float(np.mean(values))
         std_daily = float(np.std(values))
 
+        # FETCH THE SUGGESTED SUPPLIER
+        supplier_record = db.query(Supplier.name).join(
+            MedicineSupplier, Supplier.id == MedicineSupplier.supplier_id
+        ).filter(
+            MedicineSupplier.medicine_id == med.id
+        ).first()
+        
+        supplier_name = supplier_record[0] if supplier_record else "Unknown Supplier"
+
         medicine_dict = {
             'id': med.id,
             'name': med.name,
             'current_stock_units': med.current_stock_units,
             'unit_cost': med.unit_cost_inr,
             'lead_time_days': med.lead_time_days,
+            'suggested_supplier': supplier_name  # INJECT IT HERE
         }
         forecast_dict = {
             'avg_daily_demand': avg_daily,
@@ -49,7 +59,7 @@ def get_reorder_recommendations(db: Session = Depends(get_db)):
 
         rec = engine.generate_recommendation(medicine_dict, forecast_dict)
         if rec['urgency'] in ('URGENT', 'WARNING'):
-            results.append(ReorderItem(**rec, lead_time_days=med.lead_time_days))
+            results.append(ReorderItem(**rec))
 
     return sorted(results, key=lambda x: (
         0 if x.urgency == 'URGENT' else 1 if x.urgency == 'WARNING' else 2

@@ -1,21 +1,18 @@
 import pandas as pd
 import numpy as np
 from prophet import Prophet
-from statsmodels.tsa.arima.model import ARIMA
+import lightgbm as lgb
 from typing import List, Dict, Optional
-from datetime import date, timedelta
 import warnings
-warnings.filterwarnings('ignore')
 
+warnings.filterwarnings('ignore')
 
 class DemandForecaster:
     """
-    Ensemble demand forecaster combining Facebook Prophet and ARIMA.
-    Prophet handles seasonality (monsoon spikes); ARIMA captures 
-    short-term autocorrelation.
+    Ensemble demand forecaster combining Facebook Prophet and LightGBM.
+    The ultimate balance of API latency and forecast accuracy.
     """
 
-    # Monsoon demand multipliers by medicine category (Jul=7, Aug=8, Sep=9)
     SEASONAL_FACTORS = {
         'Rehydration':   {7: 3.40, 8: 3.10, 9: 2.90},
         'Antibiotic':    {7: 1.80, 8: 1.75, 9: 1.60},
@@ -27,36 +24,25 @@ class DemandForecaster:
     def __init__(self, medicine_category: str):
         self.category = medicine_category
         self.prophet_model: Optional[Prophet] = None
-        self.arima_model = None
+        self.lgb_model: Optional[lgb.LGBMRegressor] = None
+        self.last_time_idx = 0
 
     def prepare_dataframe(self, consumption_records: List[Dict]) -> pd.DataFrame:
-        """
-        Converts raw consumption records to Prophet-compatible format.
-        Adds monsoon seasonality as external regressor.
-        """
         df = pd.DataFrame(consumption_records)
         df['ds'] = pd.to_datetime(df['date'])
         df['y'] = df['units_consumed'].astype(float)
         df = df.sort_values('ds').reset_index(drop=True)
         
-        # Add monsoon regressor
         df['is_monsoon'] = df['ds'].dt.month.isin([7, 8, 9]).astype(float)
         
-        # Apply seasonal multiplier based on category
-        seasonal = self.SEASONAL_FACTORS.get(self.category, {})
-        df['seasonal_boost'] = df['ds'].dt.month.map(seasonal).fillna(1.0)
-        
-        return df[['ds', 'y', 'is_monsoon', 'seasonal_boost']]
+        return df[['ds', 'y', 'is_monsoon']]
 
     def fit_prophet(self, df: pd.DataFrame) -> Prophet:
-        """
-        Fits Prophet model with yearly + weekly seasonality and monsoon regressor.
-        """
         model = Prophet(
             yearly_seasonality=True,
             weekly_seasonality=True,
             daily_seasonality=False,
-            changepoint_prior_scale=0.05,  # Conservative — pharma demand is stable
+            changepoint_prior_scale=0.05,
             seasonality_prior_scale=10.0,
             interval_width=0.95
         )
@@ -65,43 +51,61 @@ class DemandForecaster:
         self.prophet_model = model
         return model
 
-    def fit_arima(self, series: pd.Series) -> None:
-        """
-        ARIMA(2,1,2) — captures short-term autocorrelation in daily consumption.
-        """
-        model = ARIMA(series.values, order=(2, 1, 2))
-        self.arima_model = model.fit()
+    def fit_lightgbm(self, df: pd.DataFrame) -> None:
+        """Engineers temporal features so the tree model understands the calendar."""
+        df_lgb = df.copy()
+        df_lgb['time_idx'] = np.arange(len(df_lgb))
+        df_lgb['dayofweek'] = df_lgb['ds'].dt.dayofweek
+        df_lgb['month'] = df_lgb['ds'].dt.month
+        df_lgb['dayofyear'] = df_lgb['ds'].dt.dayofyear
+        
+        X = df_lgb[['time_idx', 'dayofweek', 'month', 'dayofyear', 'is_monsoon']]
+        y = df_lgb['y']
+        
+        # LightGBM is inherently faster than XGBoost
+        self.lgb_model = lgb.LGBMRegressor(
+            n_estimators=100, 
+            max_depth=5, 
+            learning_rate=0.05,
+            subsample=0.8,
+            verbosity=-1  # Mutes LightGBM console spam
+        )
+        self.lgb_model.fit(X, y)
+        self.last_time_idx = len(df_lgb) - 1
 
     def forecast(self, df: pd.DataFrame, horizon_days: int = 90) -> pd.DataFrame:
-        """
-        Returns ensemble forecast (70% Prophet + 30% ARIMA) with confidence intervals.
-        """
         self.fit_prophet(df)
-        self.fit_arima(df['y'])
+        self.fit_lightgbm(df)
 
-        # Prophet forecast
+        # --- Prophet Forecast ---
         future = self.prophet_model.make_future_dataframe(periods=horizon_days)
         future['is_monsoon'] = future['ds'].dt.month.isin([7, 8, 9]).astype(float)
         prophet_pred = self.prophet_model.predict(future).tail(horizon_days)
 
-        # ARIMA forecast
-        arima_pred = self.arima_model.forecast(steps=horizon_days)
-        arima_ci = self.arima_model.get_forecast(steps=horizon_days).conf_int()
+        # --- LightGBM Forecast ---
+        lgb_future = pd.DataFrame({'ds': future['ds'].tail(horizon_days)})
+        lgb_future['time_idx'] = np.arange(self.last_time_idx + 1, self.last_time_idx + 1 + horizon_days)
+        lgb_future['dayofweek'] = lgb_future['ds'].dt.dayofweek
+        lgb_future['month'] = lgb_future['ds'].dt.month
+        lgb_future['dayofyear'] = lgb_future['ds'].dt.dayofyear
+        lgb_future['is_monsoon'] = lgb_future['ds'].dt.month.isin([7, 8, 9]).astype(float)
+        
+        lgb_yhat = self.lgb_model.predict(lgb_future[['time_idx', 'dayofweek', 'month', 'dayofyear', 'is_monsoon']])
 
-        # Ensemble blend
-        ensemble_yhat = 0.70 * prophet_pred['yhat'].values + 0.30 * arima_pred
+        # --- Dynamic Blend ---
+        # 85% Prophet during monsoon to preserve the outbreak spike, 60% otherwise.
+        blend_weights = np.where(lgb_future['is_monsoon'] == 1.0, 0.85, 0.60)
+        ensemble_yhat = (blend_weights * prophet_pred['yhat'].values) + ((1 - blend_weights) * lgb_yhat)
         
         result = pd.DataFrame({
             'forecast_date': prophet_pred['ds'].values,
             'predicted_units': np.maximum(0, ensemble_yhat).astype(int),
             'upper_ci': np.maximum(0, prophet_pred['yhat_upper'].values).astype(int),
             'lower_ci': np.maximum(0, prophet_pred['yhat_lower'].values).astype(int),
-            'prophet_pred': prophet_pred['yhat'].values,
-            'arima_pred': arima_pred,
+            'model_pred': ensemble_yhat,  # Keeps your Pydantic schema happy
         })
         return result
 
     def calculate_mape(self, actual: np.ndarray, predicted: np.ndarray) -> float:
-        """Mean Absolute Percentage Error — model accuracy metric."""
         mask = actual != 0
         return float(np.mean(np.abs((actual[mask] - predicted[mask]) / actual[mask])) * 100)

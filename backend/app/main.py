@@ -11,7 +11,7 @@ from app.models import (
 )
 
 # Import routers
-from app.routers import forecast, medicines, reorder, ai_insights
+from app.routers import forecast, medicine, reorder, ai_insights
 
 # Create tables (use Alembic for production — this is a dev convenience)
 Base.metadata.create_all(bind=engine)
@@ -39,7 +39,7 @@ app.add_middleware(
 )
 
 # Register routers
-app.include_router(medicines.router)
+app.include_router(medicine.router)
 app.include_router(forecast.router)
 app.include_router(reorder.router)
 app.include_router(ai_insights.router)
