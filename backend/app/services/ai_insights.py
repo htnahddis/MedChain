@@ -1,7 +1,7 @@
-import anthropic
+import google.generativeai as genai
 from app.config import settings
 
-client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+genai.configure(api_key=settings.GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """You are MedChain AI, an expert pharmaceutical supply chain analyst 
 specialising in India's essential medicines supply chain. 
@@ -22,8 +22,8 @@ async def get_supply_chain_insight(question: str, dashboard_context: dict) -> st
     Streams AI analysis of current supply chain state.
     dashboard_context contains live risk scores, forecasts, and reorder data.
     """
-    if not settings.ANTHROPIC_API_KEY:
-        return "AI insights unavailable — ANTHROPIC_API_KEY not configured."
+    if not settings.GEMINI_API_KEY:
+        return "AI insights unavailable — GEMINI_API_KEY not configured."
 
     context_summary = f"""
 Current supply chain snapshot:
@@ -35,15 +35,19 @@ Current supply chain snapshot:
     """
     
     try:
-        message = await client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=600,
-            system=SYSTEM_PROMPT,
-            messages=[{
-                "role": "user",
-                "content": f"{context_summary}\n\nQuestion: {question}"
-            }]
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            system_instruction=SYSTEM_PROMPT
         )
-        return message.content[0].text
+        
+        prompt = f"{context_summary}\n\nQuestion: {question}"
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                max_output_tokens=600,
+                temperature=0.7
+            )
+        )
+        return response.text
     except Exception as e:
         return f"AI analysis error: {str(e)}"
