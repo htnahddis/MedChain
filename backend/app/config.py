@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://medchain_user:medchain_pass@localhost:5432/medchain_db"
     
     # API Keys
-    GEMINI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
     OPENFDA_API_KEY: Optional[str] = ""
     
     # App

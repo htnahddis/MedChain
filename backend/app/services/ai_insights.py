@@ -1,7 +1,7 @@
-import google.generativeai as genai
+from groq import Groq
 from app.config import settings
 
-genai.configure(api_key=settings.GEMINI_API_KEY)
+client = Groq(api_key=settings.GROQ_API_KEY)
 
 SYSTEM_PROMPT = """You are MedChain AI, an expert pharmaceutical supply chain analyst 
 specialising in India's essential medicines supply chain. 
@@ -22,8 +22,8 @@ async def get_supply_chain_insight(question: str, dashboard_context: dict) -> st
     Streams AI analysis of current supply chain state.
     dashboard_context contains live risk scores, forecasts, and reorder data.
     """
-    if not settings.GEMINI_API_KEY:
-        return "AI insights unavailable — GEMINI_API_KEY not configured."
+    if not settings.GROQ_API_KEY:
+        return "AI insights unavailable — GROQ_API_KEY not configured."
 
     context_summary = f"""
 Current supply chain snapshot:
@@ -33,21 +33,17 @@ Current supply chain snapshot:
 - Pending reorders: {dashboard_context.get('pending_reorders', [])}
 - Season: {dashboard_context.get('current_season', 'Standard')}
     """
-    
+
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            system_instruction=SYSTEM_PROMPT
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"{context_summary}\n\nQuestion: {question}"}
+            ],
+            max_tokens=600,
+            temperature=0.7
         )
-        
-        prompt = f"{context_summary}\n\nQuestion: {question}"
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=600,
-                temperature=0.7
-            )
-        )
-        return response.text
+        return response.choices[0].message.content
     except Exception as e:
         return f"AI analysis error: {str(e)}"

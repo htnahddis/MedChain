@@ -66,7 +66,7 @@ def seed():
     try:
         # Skip if already seeded
         if db.query(Medicine).count() > 0:
-            print("✓ Database already seeded. Skipping.")
+            print("[OK] Database already seeded. Skipping.")
             return
 
         print("Seeding suppliers...")
@@ -105,16 +105,16 @@ def seed():
             ]
             db.bulk_save_objects(records)
             db.commit()
-            print(f"  ✓ {med.name} — {len(records)} consumption records")
+            print(f"  [OK] {med.name} - {len(records)} consumption records")
 
-        print("\n✅ Seeding complete!")
+        print("\n[DONE] Seeding complete!")
         print(f"   {db.query(Medicine).count()} medicines")
         print(f"   {db.query(Supplier).count()} suppliers")
         print(f"   {db.query(ConsumptionRecord).count()} consumption records")
 
     except Exception as e:
         db.rollback()
-        print(f"❌ Seed error: {e}")
+        print(f"[ERROR] Seed error: {e}")
         raise
     finally:
         db.close()
