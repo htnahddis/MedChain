@@ -1,7 +1,14 @@
+<<<<<<< HEAD
 import anthropic
 from app.config import settings
 
 client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+=======
+from groq import Groq
+from app.config import settings
+
+client = Groq(api_key=settings.GROQ_API_KEY)
+>>>>>>> another_branch_soham
 
 SYSTEM_PROMPT = """You are MedChain AI, an expert pharmaceutical supply chain analyst 
 specialising in India's essential medicines supply chain. 
@@ -22,8 +29,13 @@ async def get_supply_chain_insight(question: str, dashboard_context: dict) -> st
     Streams AI analysis of current supply chain state.
     dashboard_context contains live risk scores, forecasts, and reorder data.
     """
+<<<<<<< HEAD
     if not settings.ANTHROPIC_API_KEY:
         return "AI insights unavailable — ANTHROPIC_API_KEY not configured."
+=======
+    if not settings.GROQ_API_KEY:
+        return "AI insights unavailable — GROQ_API_KEY not configured."
+>>>>>>> another_branch_soham
 
     context_summary = f"""
 Current supply chain snapshot:
@@ -33,6 +45,7 @@ Current supply chain snapshot:
 - Pending reorders: {dashboard_context.get('pending_reorders', [])}
 - Season: {dashboard_context.get('current_season', 'Standard')}
     """
+<<<<<<< HEAD
     
     try:
         message = await client.messages.create(
@@ -45,5 +58,19 @@ Current supply chain snapshot:
             }]
         )
         return message.content[0].text
+=======
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"{context_summary}\n\nQuestion: {question}"}
+            ],
+            max_tokens=600,
+            temperature=0.7
+        )
+        return response.choices[0].message.content
+>>>>>>> another_branch_soham
     except Exception as e:
         return f"AI analysis error: {str(e)}"

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Web framework
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.1
@@ -52,3 +53,59 @@ httpx>=0.26.0
 # Utilities
 python-dateutil
 scipy
+=======
+# Web framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.1
+
+# Database
+sqlalchemy>=2.0.25
+alembic>=1.13.1
+psycopg2-binary>=2.9.9
+
+# Data validation
+pydantic>=2.9.0
+pydantic-settings>=2.1.0
+
+# Data science
+pandas
+numpy
+
+# Prophet (time series) — needs these in exact order
+prophet
+holidays
+
+# ARIMA
+statsmodels
+
+# HTTP client (for OpenFDA)
+httpx>=0.26.0
+
+# Groq AI
+groq>=0.4.0
+
+# Auth
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.9
+
+# Env
+python-dotenv>=1.0.0
+
+# Excel/CSV export
+openpyxl>=3.1.2
+xlsxwriter>=3.1.9
+
+# Background tasks
+celery>=5.3.6
+redis>=5.0.1
+
+# Testing
+pytest>=7.4.4
+pytest-asyncio>=0.23.3
+httpx>=0.26.0
+
+# Utilities
+python-dateutil
+scipy
+>>>>>>> another_branch_soham
